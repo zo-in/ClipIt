@@ -1,0 +1,35 @@
+# --- Security (CRITICAL) ---
+.env
+*.env
+secrets.properties
+
+# --- Build Artifacts ---
+target/
+*.jar
+*.war
+.mvn/wrapper/maven-wrapper.jar
+
+# --- IDE Settings (Eclipse/STS) ---
+.classpath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+bin/
+
+# --- IDE Settings (IntelliJ IDEA) ---
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# --- IDE Settings (VS Code) ---
+.vscode/
+
+# --- OS Generated Files ---
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+logs/
