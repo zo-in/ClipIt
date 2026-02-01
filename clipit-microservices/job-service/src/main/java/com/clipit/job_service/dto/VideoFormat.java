@@ -12,4 +12,9 @@ public class VideoFormat {
     private String extension;
     private String resolution;
     private String fps;
+    
+    public String getLabel() {
+        return resolution + " (" + fps + "fps)";
+    }
 }
+

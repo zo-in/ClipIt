@@ -7,8 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,9 +18,8 @@ public class FormatService {
     private String ytDlpPath;
 
     public FormatsResponse getFormats(String videoUrl) {
-        FormatsResponse response = new FormatsResponse();
-        List<VideoFormat> videoFormats = new ArrayList<>();
-        
+        Map<String, FormatCandidate> bestFormats = new HashMap<>();
+
         try {
             ProcessBuilder pb = new ProcessBuilder(ytDlpPath, "-F", videoUrl);
             pb.redirectErrorStream(true);
@@ -30,54 +28,95 @@ public class FormatService {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
+                    
+                    if (!line.contains("video only")) continue;
+
                     VideoFormat format = parseLine(line);
                     if (format != null) {
-                        videoFormats.add(format);
+                        String key = format.getResolution() + "@" + format.getFps();
+                        
+                        int currentRank = getCodecRank(line);
+
+                        if (!bestFormats.containsKey(key) || currentRank < bestFormats.get(key).rank) {
+                            bestFormats.put(key, new FormatCandidate(format, currentRank));
+                        }
                     }
                 }
             }
-
             process.waitFor();
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        
-        response.setVideoFormats(videoFormats);
-        // We leave audioFormats null or empty since we handle audio automatically
+        // Sort Highest Resolution -> Highest FPS
+        List<VideoFormat> sortedList = new ArrayList<>();
+        for (FormatCandidate candidate : bestFormats.values()) {
+            sortedList.add(candidate.format);
+        }
+
+        sortedList.sort((f1, f2) -> {
+            int h1 = parseHeight(f1.getResolution());
+            int h2 = parseHeight(f2.getResolution());
+            int resComp = Integer.compare(h2, h1);
+            if (resComp != 0) return resComp;
+            
+            int fps1 = parseFps(f1.getFps());
+            int fps2 = parseFps(f2.getFps());
+            return Integer.compare(fps2, fps1);
+        });
+
+        FormatsResponse response = new FormatsResponse();
+        response.setVideoFormats(sortedList);
         response.setAudioFormats(new ArrayList<>()); 
-        
+
         return response;
     }
 
-    private VideoFormat parseLine(String line) {
-        // Skip headers and irrelevant lines
-        if (line.startsWith("[") || line.contains("ID") || line.contains("EXT")) {
-            return null;
-        }
+    private int getCodecRank(String line) {
         
-        // Regex to capture: ID (digits), Extension, Resolution (WxH), FPS (digits)
-        // Matches: "137  mp4   1920x1080   30"
-        Pattern pattern = Pattern.compile("^(\\d+)\\s+(\\w+)\\s+(\\d+x\\d+)\\s+(\\d+).*");
+        if (line.contains("avc1")) return 1; 
+        
+        if (line.contains("av01")) return 2; 
+
+        if (line.contains("vp9")) return 3;  
+        
+        return 4;
+    }
+
+    private VideoFormat parseLine(String line) {
+        Pattern pattern = Pattern.compile("^(\\d+)\\s+(\\w+)\\s+(\\d+x\\d+)\\s+([\\d\\s]+).*");
         Matcher matcher = pattern.matcher(line);
 
         if (matcher.find()) {
             String id = matcher.group(1);
-            // Group 2 is extension (e.g. mp4), we don't necessarily need to store it if we just want ID
             String extension = matcher.group(2);
             String resolution = matcher.group(3);
-            String fps = matcher.group(4);
+            String fps = matcher.group(4).trim().split("\\s+")[0];
 
-            // Filter out "audio only" or "images" if they accidentally match
-            if (line.contains("audio only") || line.contains("images")) {
-                return null;
-            }
-
-            // Create format object
-            // We append FPS to resolution for clarity in UI, e.g., "1080p (60fps)"
             return new VideoFormat(id, extension, resolution, fps);
         }
-
         return null;
+    }
+
+    private int parseHeight(String resolution) {
+        try {
+            String[] parts = resolution.split("x");
+            return parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+        } catch (Exception e) { return 0; }
+    }
+
+    private int parseFps(String fps) {
+        try {
+            return Integer.parseInt(fps);
+        } catch (Exception e) { return 0; }
+    }
+
+    private static class FormatCandidate {
+        VideoFormat format;
+        int rank;
+        public FormatCandidate(VideoFormat format, int rank) {
+            this.format = format;
+            this.rank = rank;
+        }
     }
 }

@@ -25,6 +25,9 @@ public class Job {
 
 	private String status; // QUEUED, DOWNLOADING, PROCESSING, COMPLETED, FAILED
 
+	@Column(name = "progress")
+    private int progress = 0;
+	
 	private String filePath; // Path to the final result
 
 	private LocalDateTime createdAt;
